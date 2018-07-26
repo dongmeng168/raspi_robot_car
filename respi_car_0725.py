@@ -5,6 +5,16 @@ from random import random,choice
 from threading import Thread
 from copy import copy
 
+class TraceStatus(object):
+    def __init__(self, ori_fun):
+        self.ori_fun = ori_fun
+    def __call__(self):
+        print("decorator start")
+        self.ori_fun()
+        print("decorator end")
+
+
+
 class MyCar(object):
     """docstring for MyCar"""
     def __init__(self):
@@ -26,7 +36,7 @@ class MyCar(object):
         self.stop_status = (0,0,0,0)
         self.back_status = (0,1,0,1)
 
-        # 前进时加速到最大速度时间，减速时间初始值为1秒
+        # 前进时加速到最大速度时间，减速时减速时间，均设为1秒
         self.forward_acc_dec_time = 1
 
         # 距离感应器，键为感应器所在位置的角度，值对感应器状态，初始为1，没有感应到物体
@@ -35,7 +45,7 @@ class MyCar(object):
         self.sensor_angle_status = {0:1,90:1,180:1,270:1}
         # 距离感应器是否感应到物品，1表示没有
         self.sensor_of_things = {0:1,90:1,180:1,270:1}
-        # 小车静止时，检测到物体小车转向后再前进时间
+        # 小车静止时，检测到物体靠近会小车转向再前进，参数为前进时间，单位为秒
         self.sensor_leave_time = 0.1
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
         self.move_status = 0
@@ -183,7 +193,7 @@ class MyCar(object):
 if __name__ == '__main__':
     car1 = MyCar()
     # print("move_status=",car1.move_status)
-    car1.listen_sensor()
+    # car1.listen_sensor()
     print("MyCar done")
 
 
@@ -203,5 +213,11 @@ if __name__ == '__main__':
     time.sleep(0.2)
     car1.stop()
     print("move_status=",car1.move_status)
+
+    car1.backup()
+    print("move_status=",car1.move_status)    
+    car1.stop()
+
+
     print("all done")
 
