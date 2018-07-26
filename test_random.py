@@ -1,17 +1,18 @@
 #coding:utf8
 from random import random,choice
-from copy import deepcopy
-d1 = {0:0,90:1,180:2,270:3}
+from copy import deepcopy,copy
 
-# # for key,value in d1.items():
-# #     print(key,value)
+angle_status_dict = {0:1,90:1,180:1,270:1}
+angle_list = []
 
-# for i in range(40,100+1):
-#     print(40+100-i)
-d2 = deepcopy(d1)
+print(angle_status_dict)
 
-print(d1)
+for key,value in angle_status_dict.items():
+    if value == 1:
+        angle_list.append(angle_status_dict[key]) 
+# 如果角度列表为空，表示被围着了，应该停止
 
-d2[0] = 100
+print(angle_list)
 
-print(d1)
+if not angle_list:
+    print("angle_list call stop")
