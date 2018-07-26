@@ -3,6 +3,7 @@ import RPi.GPIO as GPIO
 import time
 from random import random,choice
 from threading import Thread
+from copy import deepcopy
 
 class MyCar(object):
     """docstring for MyCar"""
@@ -25,11 +26,16 @@ class MyCar(object):
         self.stop_status = (0,0,0,0)
         self.back_status = (0,1,0,1)
 
+        # 前进时加速到最大速度时间，减速时间初始值为1秒
+        self.forward_acc_dec_time = 1
+
         # 距离感应器，键为感应器所在位置的角度，值对感应器状态，初始为1，没有感应到物体
         self.sensor_pin = (35,36,37,38)
         self.sensor_pin_angle = {35:0,36:90,37:180,38:270}
         self.sensor_angle_status = {0:1,90:1,180:1,270:1}
-        # 检测到物体小车转向后再前进时间
+        # 距离感应器是否感应到物品，1表示没有
+        self.sensor_of_things = {0:1,90:1,180:1,270:1}
+        # 小车静止时，检测到物体小车转向后再前进时间
         self.sensor_leave_time = 0.1
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
         self.move_status = 0
@@ -58,25 +64,35 @@ class MyCar(object):
         for pin in self.sensor_pin :
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)       
 
-    def forward(self,time_ms):
-        print("forward time is %s" % str(time_ms))
-        """向前进，参数为前进时间"""
+    def forward(self):
+        print("forward...")
+        """向前进，通过控制占空比慢慢加速"""
         self.move_status = 1
-        # 修改占空比为前进模式
-        for pwm_signal in self.pwm_signals:
-            pwm_signal.ChangeDutyCycle(self.pwm_dc_forward)
         # 使能端赋值为前进模式
         GPIO.output(self.en_pin,self.forward_status)
-        time.sleep(time_ms)
-        self.stop()
+        # 慢慢修改占空比从转弯模式为前进模式
+        delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
+        for dc_now in range(self.pwm_dc_turn,self.pwm_dc_forward+1):
+            for pwm_signal in self.pwm_signals:
+                pwm_signal.ChangeDutyCycle(dc_now)
+            time.sleep(delta_time)
+
+
 
     def stop(self):
         """小车停止"""
         self.move_status = 3
+        # 慢慢修改占空比从前进模式到转弯模式，然后停车
+        delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
+        for dc_now in range(self.pwm_dc_turn,self.pwm_dc_forward+1):
+            for pwm_signal in self.pwm_signals:
+                pwm_signal.ChangeDutyCycle(self.pwm_dc_turn+self.pwm_dc_forward-dc_now)
+            time.sleep(delta_time)
         # 使能端赋值为停止模式
         GPIO.output(self.en_pin,self.stop_status) 
 
     def turn(self,angle):
+        print("turn...")
         """转弯，参数为角度"""
         self.move_status = 2
         # 使pwm占空比为转弯模式
@@ -96,18 +112,16 @@ class MyCar(object):
             # 左转
             GPIO.output(self.en_pin,self.turn_left_status)
             time.sleep(turn_time)
-        self.stop()
 
-    def backup(self,time_ms):
-        print("backup time is %s" % str(time_ms))
+    def backup(self):
+        print("backup...")
         """后退，pwm采用转弯模式，参数为以秒为单位的时间"""
         self.move_status = 4
         # 使pwm占空比为转弯模式
         for pwm_signal in self.pwm_signals:
             pwm_signal.ChangeDutyCycle(self.pwm_dc_turn)        
         GPIO.output(self.en_pin,self.back_status)
-        time.sleep(time_ms)
-        self.stop()
+
 
     def calaTurnTime(self,angle):
         """根据输入的角度计算转弯时间"""
@@ -133,29 +147,34 @@ class MyCar(object):
     def deal_sensor(self):
         """处理单个或者多个红外线模块引脚为0的函数，用一个线程跑"""
         while True:
-            # flag判断是否有至少一个模块检测到物品
-            flag = False
+            angle_status_dict = deepcopy(self.sensor_angle_status)
             for pin in self.sensor_pin:
                 if GPIO.event_detected(pin):
-                    self.sensor_angle_status[self.sensor_pin_angle[pin]] = 0
-                    flag = True
+                    angle_status_dict[self.sensor_pin_angle[pin]] = 0
+                    self.sensor_of_things[self.sensor_pin_angle[pin]] = 0
             # 遇到物品的引脚sensor_angle_status字典值为0
             # 值为1的为没有遇到物品的方向，随机选取值为1的角度为转向角度
             # 值为1的角度（没有遇到物体的方向）为0个，则原地不动，返回角度0
             angle_list = []
-            for key,value in self.sensor_angle_status.items():
+            for key,value in angle_status_dict.items():
                 if value == 1:
-                    angle_list.append(self.sensor_angle_status[key]) 
+                    angle_list.append(angle_status_dict[key]) 
             # 如果角度列表为空，表示被围着了，应该停止
             if angle_list:
                 self.stop()
-            # 角度列表不为空，且至少一个模块检测到物品，则旋转一个角度，向前走一段时间
-            if angle_list and flag:
+            # 角度列表不为空（至少一个模块检测到物品）且是静止状态，则旋转一个角度，向前走一段时间
+            if angle_list and self.move_status == 3 :
                 # 随机选择一个剩余的作为转的角度
-                # 旋转一个角度，然后向前行驶一段时间
                 angle = choice(angle_list)
                 self.turn(angle)
-                self.forward(self.sensor_leave_time)
+                # 向前行驶一段时间,停止
+                self.forward()
+                time.sleep(self.sensor_leave_time)
+                self.stop()
+            # 角度列表不为空，且是前进状态，则停止前进
+            if angle_list and self.move_status == 1 :
+                self.stop()
+            # 为了测试时间为0.1，实际使用修改为0.001
             time.sleep(0.1)
             print("deal_sensor runing...")
 
@@ -166,15 +185,23 @@ if __name__ == '__main__':
     print(car1.move_status)
     car1.listen_sensor()
     print("MyCar done")
-    car1.forward(0.1)
+
+
+    car1.forward()
+    print(car1.move_status)
+    time.sleep(1)
+    car1.stop()
 
     car1.turn(60)
     car1.turn(310)
+    print(car1.move_status)    
     car1.turn(5)
     car1.turn(359)
     print(car1.move_status)
     car1.turn(22)
-    car1.forward(0.01)
-    car1.backup(0.02)
+    car1.forward()
+    time.sleep(0.2)
+    car1.stop()
+    print(car1.move_status)
     print("done")
 
