@@ -1,9 +1,52 @@
 #coding:utf8
 import RPi.GPIO as GPIO
 import time
+
+
 from random import random,choice
 from threading import Thread
 from copy import copy
+
+import logging
+
+
+class MyCarLog(object):
+    """docstring for MyCarLog"""
+    def __init__(self):
+        pass
+        # 创建Logger
+        self.logger = logging.getLogger("MyCar.main")
+        self.logger.setLevel(logging.DEBUG)
+
+        # 创建Handler
+
+        # 终端Handler
+        self.consoleHandler = logging.StreamHandler()
+        self.consoleHandler.setLevel(logging.DEBUG)
+
+        # 文件Handler
+        self.fileHandler = logging.FileHandler('log.log', mode='w', encoding='UTF-8')
+        self.fileHandler.setLevel(logging.NOTSET)
+
+        # Formatter
+        # self.formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self.formatter = logging.Formatter('%(asctime)s - %(message)s')
+        self.consoleHandler.setFormatter(self.formatter)
+        self.fileHandler.setFormatter(self.formatter)
+
+        # 添加到Logger中
+        self.logger.addHandler(self.consoleHandler)
+        self.logger.addHandler(self.fileHandler)
+    def debug(self,msg):
+        return self.logger.debug(msg)
+    def info(self,msg):
+        return self.logger.info(msg)
+    def warning(self,msg):
+        return self.logger.warning(msg)
+    def error(self,msg):
+        return self.logger.error(msg)
+    def critical(self,msg):
+        return self.logger.critical(msg)
 
 class TraceStatus(object):
     def __init__(self, ori_fun):
@@ -50,8 +93,13 @@ class MyCar(object):
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
         self.move_status = 0
 
+        """初始化日志记录类"""
+        self.car_log = MyCarLog()
+
         """调用初始化函数"""
         self.setup()
+
+
 
     def setup(self):
         """设置小车pwm和控制引脚初始化"""
@@ -72,10 +120,11 @@ class MyCar(object):
             pwm_signal.start(self.pwm_dc_forward)
         # 设置距离感应器，初始状态上拉为高电平，感应器时遇到物品低电平
         for pin in self.sensor_pin :
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)       
+            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        # 纪录设置完成到日志中
+        self.car_log.info("start_ok,angle=0")       
 
     def forward(self):
-        print("forward...")
         """向前进，通过控制占空比慢慢加速"""
         self.move_status = 1
         # 使能端赋值为前进模式
@@ -86,10 +135,10 @@ class MyCar(object):
             for pwm_signal in self.pwm_signals:
                 pwm_signal.ChangeDutyCycle(dc_now)
             time.sleep(delta_time)
+        self.car_log.info("forward,angle=0")
 
     def stop(self):
         """小车停止"""
-        print("stop...")
         self.move_status = 3
         # 慢慢修改占空比从前进模式到转弯模式，然后停车
         delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
@@ -99,9 +148,9 @@ class MyCar(object):
             time.sleep(delta_time)
         # 使能端赋值为停止模式
         GPIO.output(self.en_pin,self.stop_status) 
+        self.car_log.info("stop,angle=0")
 
     def turn(self,angle):
-        print("turn...angle is %s" % str(angle))
         """转弯，参数为角度"""
         self.move_status = 2
         # 使pwm占空比为转弯模式
@@ -121,27 +170,29 @@ class MyCar(object):
             # 左转
             GPIO.output(self.en_pin,self.turn_left_status)
             time.sleep(turn_time)
+        self.car_log.info("turn,angle=%s" % str(angle))
 
     def backup(self):
-        print("backup...")
         """后退，pwm采用转弯模式，参数为以秒为单位的时间"""
         self.move_status = 4
         # 使pwm占空比为转弯模式
         for pwm_signal in self.pwm_signals:
             pwm_signal.ChangeDutyCycle(self.pwm_dc_turn)        
         GPIO.output(self.en_pin,self.back_status)
+        self.car_log.info("backup,angle=0")
 
 
     def calaTurnTime(self,angle):
         """根据输入的角度计算转弯时间"""
         turn_time = angle*3.7/1000.0
-        print("turn time is %s" % str(turn_time))
+        self.car_log.info("calaTurnTime,angle=%s,time=%s" % (angle,turn_time))
         return turn_time
 
-    def __del__(self):
+    def shutDown(self):
         for pwm_signal in self.pwm_signals:
             pwm_signal.stop()
         GPIO.cleanup()
+        self.car_log.info("shutDown,angle=0")
 
 
     def listen_sensor(self):
@@ -161,6 +212,7 @@ class MyCar(object):
                 if GPIO.event_detected(pin):
                     angle_status_dict[self.sensor_pin_angle[pin]] = 0
                     self.sensor_of_things[self.sensor_pin_angle[pin]] = 0
+
             # 遇到物品的引脚sensor_angle_status字典值为0
             # 值为1的为没有遇到物品的方向，随机选取值为1的角度为转向角度
             # 值为1的角度（没有遇到物体的方向）为0个，则原地不动，返回角度0
@@ -176,47 +228,44 @@ class MyCar(object):
                 # 静止状态，则旋转一个角度，向前走一段时间,停止
                 if self.move_status == 3 :
                     # 随机选择一个剩余的作为转的角度
+
                     angle = choice(angle_list)
+                    self.car_log.info("sensor,stop,all_angle=%s,turn_angle=%s" % (str(angle_list),str(angle)))
                     self.turn(angle)
                     self.forward()
                     time.sleep(self.sensor_leave_time)
                     self.stop()
                 # 前进状态，则停止前进
                 elif self.move_status == 1 :
+                    self.car_log.info("sensor,forward,all_angle=%s" % str(angle_list))
                     self.stop()
             # 为了测试时间为0.1，实际使用修改为0.001
             time.sleep(0.01)
-            # print("deal_sensor runing...")
-
 
 
 if __name__ == '__main__':
     car1 = MyCar()
-    # print("move_status=",car1.move_status)
-    # car1.listen_sensor()
-    print("MyCar done")
+    car1.listen_sensor()
 
 
     car1.forward()
-    print("move_status=",car1.move_status)
     time.sleep(1)
     car1.stop()
 
     car1.turn(60)
     car1.turn(310)
-    print("move_status=",car1.move_status)  
     car1.turn(5)
     car1.turn(359)
-    print("move_status=",car1.move_status)
     # car1.turn(22)
     car1.forward()
     time.sleep(0.2)
     car1.stop()
-    print("move_status=",car1.move_status)
+
 
     car1.backup()
-    print("move_status=",car1.move_status)    
     car1.stop()
+
+    car1.shutDown()
 
 
     print("all done")
