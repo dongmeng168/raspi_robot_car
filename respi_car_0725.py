@@ -105,7 +105,7 @@ class MyCar(object):
         """设置小车pwm和控制引脚初始化"""
         # 定义引脚号规则，使用BOARD模式
         GPIO.setmode(GPIO.BOARD)
-        GPIO.setwarnings(False)
+        # GPIO.setwarnings(False)
         # 控制引脚初始化，全部为0，默认初始状态为停止        
         for pin in self.en_pin:
             GPIO.setup(pin, GPIO.OUT)
