@@ -7,7 +7,11 @@ from email.header import decode_header
 from email.utils import parseaddr
 from email import message_from_string
 
+import mimetypes
 import datetime
+
+import quopri
+import base64
 
 class MyEmail(object):
     """docstring for MyEmail"""
@@ -61,9 +65,26 @@ class MyEmail(object):
         if charset:
             value = value.decode(charset)
         return value
- 
+    
+    def decode_chinese(self,str_mine_ch):
+        str_list = str_mine_ch.split('?')
+        if len(str_list) < 3:
+            return str_mine_ch
+        charset = str_list[1]
+        code_method = str_list[2]
+        str_ch = str_list[3]
+
+        if code_method == 'B':
+            str_ch_code = str(base64.b64decode(str_ch),encoding =charset)
+        elif code_method == 'Q':
+            str_ch_code = str(quopri.decodestring(str_ch),encoding =charset)
+        else:
+            str_ch_code = str_ch
+        return str_ch_code
+
+
     #递归打印信息
-    def parseMeassage(self):
+    def parseMeassage(self,message=None):
         if self.msg:
             message = self.msg
         else:
@@ -91,14 +112,48 @@ class MyEmail(object):
         else:
             print('Attachment: %s' % maintype) 
 
+    def parseMessageWalk(self,message=None):
+        if not message:
+            if self.msg :
+                message = self.msg
+            else:
+                print('no message to parde, exit code 2')
+                exit(2)
+        counter = 1
+        for part in message.walk():
+            # multipart/* are just containers
+            if part.get_content_maintype() == 'multipart':
+                continue
+            # Applications should really sanitize the given filename so that an
+            # email message can't be used to overwrite important files
+            filename = part.get_filename()
+            if filename:
+                filename = self.decode_chinese(filename)
+            else:
+                ext = mimetypes.guess_extension(part.get_content_type())
+                if not ext:
+                    # Use a generic bag-of-bits extension
+                    ext = '.bin'
+                filename = 'part-%03d%s' % (counter, ext)
+            
+            print('filename===',filename,counter)
+            counter += 1
+            # with open(os.path.join(args.directory, filename), 'wb') as fp:
+            #     fp.write(part.get_payload(decode=True))
+
+
 
 mye1 =MyEmail()
 
-# mye1.parseMails('29 Jul 2018','测试')
 date_now = datetime.datetime.now().strftime("%d %b %Y")
 part_subject = 'Raspberry_Internet_IP'
-mye1.parseMails(date_now,part_subject)
+# mye1.parseMails(date_now,part_subject)
+mye1.parseMails('30 Jul 2018','带文本附件，带MP3附件')
 
+# print(mye1.mails_head_list)
 
-mye1.parseMeassage()
-print(mye1.msg_body)
+mye1.parseMessageWalk()
+
+# mye1.parseMeassage()
+# print(mye1.msg_body)
+
