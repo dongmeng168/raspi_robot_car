@@ -7,7 +7,7 @@ from email.header import decode_header
 from email.utils import parseaddr
 from email import message_from_string
 
-
+import datetime
 
 class MyEmail(object):
     """docstring for MyEmail"""
@@ -63,9 +63,12 @@ class MyEmail(object):
         return value
  
     #递归打印信息
-    def parseMeassage(self, message=None ,indent = 0):
+    def parseMeassage(self):
         if self.msg:
             message = self.msg
+        else:
+            print("get nothing")
+            exit(2)
         maintype = message.get_content_maintype()
         content_type = message.get_content_type()
 
@@ -73,9 +76,7 @@ class MyEmail(object):
             parts = message.get_payload()
 
             for n, part in enumerate(parts):
-                print('%spart %s' % ('  '*indent, n))
-                print('%s--------------------' % ('   '*indent))
-                self.parseMeassage(part, indent + 1)
+                self.parseMeassage(part)
 
         # elif maintype == 'text/plain' or maintype == 'text/html':
         elif maintype == 'text':
@@ -85,18 +86,18 @@ class MyEmail(object):
                 mail_content = mail_content.decode(charset)
             if content_type == 'text/plain':
                 self.msg_body = mail_content.decode('utf8')
-                # self.msg_body = str(mail_content)
-                # print('%sText: %s' % ('  '*indent, str(mail_content) + '...'))
             if content_type == 'text/html':
-                print('%sHtml: %s' % ('  '*indent, str(mail_content) + '...'))
+                print('Html: %s' % str(mail_content))
         else:
-            print('%sAttachment: %s' % ('  '*indent, maintype)) 
+            print('Attachment: %s' % maintype) 
 
 
 mye1 =MyEmail()
 
 # mye1.parseMails('29 Jul 2018','测试')
-mye1.parseMails('28 Jul 2018','Raspberry_Internet_IP')
+date_now = datetime.datetime.now().strftime("%d %b %Y")
+part_subject = 'Raspberry_Internet_IP'
+mye1.parseMails(date_now,part_subject)
 
 
 mye1.parseMeassage()
