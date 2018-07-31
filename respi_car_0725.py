@@ -62,9 +62,9 @@ class MyCar(object):
     """docstring for MyCar"""
     def __init__(self):
         """定义pwm参数，占空比在前进和转弯时不同，频率为50hz"""
-        self.pwm_dc_forward = 100
-        self.pwm_dc_turn = 60
-        self.pwm_hz = 50
+        self.pwm_dc_forward = 30
+        self.pwm_dc_turn = 0
+        self.pwm_hz = 60
         
         # pwm信号引脚
         self.pwm_pin = (16,18)
@@ -289,25 +289,25 @@ class MyCar(object):
 
 if __name__ == '__main__':
     car1 = MyCar()
-    car1.listen_sensor_v2()
+    # car1.listen_sensor_v2()
 
 
     car1.forward()
-    time.sleep(1)
+    # time.sleep(0.5)
+    # car1.stop()
+
+    # car1.turn(60)
+    # car1.turn(310)
+    # car1.turn(5)
+    car1.turn(300)
+    # # car1.turn(22)
+    # car1.forward()
+    # time.sleep(0.2)
     car1.stop()
 
-    car1.turn(60)
-    car1.turn(310)
-    car1.turn(5)
-    car1.turn(359)
-    # car1.turn(22)
-    car1.forward()
-    time.sleep(0.2)
-    car1.stop()
 
-
-    car1.backup()
-    car1.stop()
+    # car1.backup()
+    # car1.stop()
 
     car1.shutDown()
 
