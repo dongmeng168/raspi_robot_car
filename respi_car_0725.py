@@ -62,10 +62,12 @@ class MyCar(object):
     """docstring for MyCar"""
     def __init__(self):
         """定义pwm参数，占空比在前进和转弯时不同，频率为50hz"""
-        self.pwm_dc_forward = 100
-        self.pwm_dc_turn = 60
+        self.pwm_dc_forward_left = 100
+        self.pwm_dc_forward_right = 100
+        self.pwm_dc_turn_left = 60
+        self.pwm_dc_turn_right = 60
         self.pwm_hz = 50
-        
+
         # pwm信号引脚
         self.pwm_pin = (16,18)
 
@@ -93,6 +95,8 @@ class MyCar(object):
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
         self.move_status = 0
 
+        self.stop_signal = False
+
         """初始化日志记录类"""
         self.car_log = MyCarLog()
 
@@ -106,7 +110,7 @@ class MyCar(object):
         # 定义引脚号规则，使用BOARD模式
         GPIO.setmode(GPIO.BOARD)
         # GPIO.setwarnings(False)
-        # 控制引脚初始化，全部为0，默认初始状态为停止        
+        # 控制引脚初始化，全部为0，默认初始状态为停止
         for pin in self.en_pin:
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
@@ -122,7 +126,7 @@ class MyCar(object):
         for pin in self.sensor_pin :
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         # 纪录设置完成到日志中
-        self.car_log.info("start_ok,angle=0")       
+        self.car_log.info("start_ok,angle=0")
 
     def forward(self):
         """向前进，通过控制占空比慢慢加速"""
@@ -130,32 +134,44 @@ class MyCar(object):
         # 使能端赋值为前进模式
         GPIO.output(self.en_pin,self.forward_status)
         # 慢慢修改占空比从转弯模式为前进模式
-        delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
-        for dc_now in range(self.pwm_dc_turn,self.pwm_dc_forward+1):
-            for pwm_signal in self.pwm_signals:
-                pwm_signal.ChangeDutyCycle(dc_now)
+        acc_nums = 20
+        delta_left_dc = int((self.pwm_dc_forward_left - self.pwm_dc_turn_left)/acc_nums)
+        delta_right_dc = int((self.pwm_dc_forward_right - self.pwm_dc_turn_right)/acc_nums)
+        delta_time = sel.forward_acc_dec_time/acc_nums
+
+        dc_now_left = self.pwm_dc_turn_left
+        dc_now_right = self.pwm_dc_turn_right
+
+        for acc_num in range(acc_nums):
+            dc_now_left += delta_left_dc
+            dc_now_right += delta_right_dc
+            pwm_signal.ChangeDutyCycle((dc_now_left,dc_now_right))
             time.sleep(delta_time)
         self.car_log.info("forward,angle=0")
 
-    def stop(self):
+    def dealStopSignal(self):
         """小车停止"""
-        self.move_status = 3
         # 慢慢修改占空比从前进模式到转弯模式，然后停车
-        delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
-        for dc_now in range(self.pwm_dc_turn,self.pwm_dc_forward+1):
-            for pwm_signal in self.pwm_signals:
-                pwm_signal.ChangeDutyCycle(self.pwm_dc_turn+self.pwm_dc_forward-dc_now)
-            time.sleep(delta_time)
-        # 使能端赋值为停止模式
-        GPIO.output(self.en_pin,self.stop_status) 
-        self.car_log.info("stop,angle=0")
+        # delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
+        # for dc_now in range(self.pwm_dc_turn,self.pwm_dc_forward+1):
+        #     for pwm_signal in self.pwm_signals:
+        #         pwm_signal.ChangeDutyCycle(self.pwm_dc_turn+self.pwm_dc_forward-dc_now)
+        #     time.sleep(delta_time)
+        while True:
+            if self.stop_signal:
+                # 使能端赋值为停止模式
+                GPIO.output(self.en_pin,self.stop_status)
+                self.move_status = 3
+                # self.car_log.info("stop,angle=0")
+            time.sleep(0.01)
 
     def turn(self,angle):
         """转弯，参数为角度"""
         self.move_status = 2
         # 使pwm占空比为转弯模式
+        pwm_dc_turn = (self.pwm_dc_turn_left,self.pwm_dc_turn_right)
         for pwm_signal in self.pwm_signals:
-            pwm_signal.ChangeDutyCycle(self.pwm_dc_turn)
+            pwm_signal.ChangeDutyCycle(pwm_dc_turn)
 
         angle = int(abs(angle) % 360)
         # 计算转弯时间
@@ -173,14 +189,19 @@ class MyCar(object):
         self.car_log.info("turn,angle=%s" % str(angle))
 
     def backup(self):
-        """后退，pwm采用转弯模式，参数为以秒为单位的时间"""
+        """后退，pwm采用转弯模式"""
         self.move_status = 4
         # 使pwm占空比为转弯模式
+        pwm_dc_turn = (self.pwm_dc_turn_left,self.pwm_dc_turn_right)
         for pwm_signal in self.pwm_signals:
-            pwm_signal.ChangeDutyCycle(self.pwm_dc_turn)        
+            pwm_signal.ChangeDutyCycle(pwm_dc_turn)
         GPIO.output(self.en_pin,self.back_status)
         self.car_log.info("backup,angle=0")
 
+    def listenStopSignal(self):
+        deal1 = Thread(target=self.dealStopSignal)
+        deal1.setDaemon(True)
+        deal1.start()
 
     def calaTurnTime(self,angle):
         """根据输入的角度计算转弯时间"""
@@ -219,7 +240,7 @@ class MyCar(object):
             angle_list = []
             for key,value in angle_status_dict.items():
                 if value == 1:
-                    angle_list.append(angle_status_dict[key]) 
+                    angle_list.append(angle_status_dict[key])
             # 没有检测到物品的角度值为1，放入列表中，如果列表不为空，表示被围着了，应该停止
             if len(angle_list) == 0 :
                 self.stop()
@@ -258,7 +279,7 @@ class MyCar(object):
         angle_list = []
         for key,value in angle_status_dict.items():
             if value == 1:
-                angle_list.append(angle_status_dict[key]) 
+                angle_list.append(angle_status_dict[key])
         # 没有检测到物品的角度值为1，放入列表中，如果列表不为空，表示被围着了，应该停止
         if len(angle_list) == 0 :
             self.stop()
