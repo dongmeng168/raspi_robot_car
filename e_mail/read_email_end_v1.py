@@ -124,12 +124,14 @@ class MyEmail(object):
         for part in message.walk():
             # multipart/* are just containers
             if part.get_content_maintype() == 'multipart':
+                # self.parseMessageWalk(part)
                 continue
             # Applications should really sanitize the given filename so that an
             # email message can't be used to overwrite important files
             filename = part.get_filename()
             if filename:
                 filename = self.decode_chinese(filename)
+                print('filename===',filename,counter)
             else:
                 ext = mimetypes.guess_extension(part.get_content_type())
                 if not ext:
@@ -137,7 +139,23 @@ class MyEmail(object):
                     ext = '.bin'
                 filename = 'part-%03d%s' % (counter, ext)
 
-            print('filename===',filename,counter)
+                maintype = part.get_content_maintype()
+                content_type = part.get_content_type()
+                print('no filename',maintype,content_type,counter)
+
+                mail_content = part.get_payload(decode=True).strip()
+                charset = self.guess_charset(part)
+                if charset:
+                    mail_content = mail_content.decode(charset)
+                else:
+                    if content_type == 'text/plain' or content_type == 'text/html':
+                        mail_content = mail_content.decode('utf8')
+                print('email content is:')
+                print(mail_content)
+
+
+
+
             counter += 1
             # with open(os.path.join(args.directory, filename), 'wb') as fp:
             #     fp.write(part.get_payload(decode=True))
@@ -149,7 +167,7 @@ mye1 =MyEmail()
 date_now = datetime.datetime.now().strftime("%d %b %Y")
 part_subject = 'Raspberry_Internet_IP'
 # mye1.parseMails(date_now,part_subject)
-mye1.parseMails('30 Jul 2018','带文本附件，带MP3附件')
+mye1.parseMails('31 Jul 2018','邮件测试')
 
 # print(mye1.mails_head_list)
 
