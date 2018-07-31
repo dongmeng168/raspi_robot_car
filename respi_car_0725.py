@@ -64,14 +64,13 @@ class MyCar(object):
         """定义pwm参数，占空比在前进和转弯时不同，频率为50hz"""
 
         
-=======
+
         self.pwm_dc_forward_left = 100
         self.pwm_dc_forward_right = 100
         self.pwm_dc_turn_left = 60
         self.pwm_dc_turn_right = 60
         self.pwm_hz = 50
 
->>>>>>> 28ed40f66c98f54332e0e7f833e57455636a5f14
         # pwm信号引脚
         self.pwm_pin = (16,18)
 
