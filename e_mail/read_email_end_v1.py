@@ -21,14 +21,14 @@ class MyEmail(object):
         # self.pop3_server = 'imap.189.cn'
         self.pop3_server = 'pop.189.cn'
 
-        self.setup()        
+        self.setup()
 
     def setup(self):
         self.server = poplib.POP3(self.pop3_server)
         self.server.set_debuglevel(0)
         self.welcome_info = self.server.getwelcome().decode('utf-8')
         self.server.user(self.my_email)
-        self.server.pass_(self.password) 
+        self.server.pass_(self.password)
         print('login ok')
     def parseMails(self,mail_Date=None,mail_Subject=None):
         #打印邮件数量和占用空间
@@ -39,15 +39,16 @@ class MyEmail(object):
         self.mails_head_list = []
         self.msg = None
         for mail_index in range(1,index+1):
-            head_info_dict = {}       
+            head_info_dict = {}
             resp, lines, octets = self.server.retr(mail_index)
             msg_content = b'\r\n'.join(lines).decode('utf-8')
-            msg = message_from_string(msg_content)        
+            msg = message_from_string(msg_content)
             for header in 'From', 'To', 'Subject', 'Date':
                 if header in msg:
                     head_info_dict[header] = self.decode_str(msg[header])
             if (mail_Subject in  head_info_dict['Subject']) and (mail_Date in head_info_dict['Date']):
                 self.msg = msg
+                print(head_info_dict['Subject'])
             self.mails_head_list.append(head_info_dict)
 
     #这是检测编码部分，有点不懂
@@ -65,7 +66,7 @@ class MyEmail(object):
         if charset:
             value = value.decode(charset)
         return value
-    
+
     def decode_chinese(self,str_mine_ch):
         str_list = str_mine_ch.split('?')
         if len(str_list) < 3:
@@ -110,7 +111,7 @@ class MyEmail(object):
             if content_type == 'text/html':
                 print('Html: %s' % str(mail_content))
         else:
-            print('Attachment: %s' % maintype) 
+            print('Attachment: %s' % maintype)
 
     def parseMessageWalk(self,message=None):
         if not message:
@@ -135,7 +136,7 @@ class MyEmail(object):
                     # Use a generic bag-of-bits extension
                     ext = '.bin'
                 filename = 'part-%03d%s' % (counter, ext)
-            
+
             print('filename===',filename,counter)
             counter += 1
             # with open(os.path.join(args.directory, filename), 'wb') as fp:
