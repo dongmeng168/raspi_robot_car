@@ -65,10 +65,10 @@ class MyCar(object):
 
         
 
-        self.pwm_dc_forward_left = 100
-        self.pwm_dc_forward_right = 100
-        self.pwm_dc_turn_left = 60
-        self.pwm_dc_turn_right = 60
+        self.pwm_dc_forward_left = 40
+        self.pwm_dc_forward_right = 40
+        self.pwm_dc_turn_left = 20
+        self.pwm_dc_turn_right = 20
         self.pwm_hz = 50
 
         # pwm信号引脚
@@ -85,7 +85,7 @@ class MyCar(object):
         self.back_status = (0,1,0,1)
 
         # 前进时加速到最大速度时间，减速时减速时间，均设为1秒
-        self.forward_acc_dec_time = 1
+        self.forward_acc_dec_time = 2
 
         # 距离感应器，键为感应器所在位置的角度，值对感应器状态，初始为1，没有感应到物体
         self.sensor_pin = (35,36,37,38)
@@ -124,7 +124,7 @@ class MyCar(object):
             self.pwm_signals.append(GPIO.PWM(pin, self.pwm_hz))
         # 以 self.pwm_dc_forward 占空比开启pwm信号，默认初始占空比为前进模式占空比
         for pwm_signal in self.pwm_signals:
-            pwm_signal.start(self.pwm_dc_forward)
+            pwm_signal.start(self.pwm_dc_forward_left)
         # 设置距离感应器，初始状态上拉为高电平，感应器时遇到物品低电平
         for pin in self.sensor_pin :
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -140,7 +140,7 @@ class MyCar(object):
         acc_nums = 20
         delta_left_dc = int((self.pwm_dc_forward_left - self.pwm_dc_turn_left)/acc_nums)
         delta_right_dc = int((self.pwm_dc_forward_right - self.pwm_dc_turn_right)/acc_nums)
-        delta_time = sel.forward_acc_dec_time/acc_nums
+        delta_time = self.forward_acc_dec_time/acc_nums
 
         dc_now_left = self.pwm_dc_turn_left
         dc_now_right = self.pwm_dc_turn_right
@@ -148,7 +148,8 @@ class MyCar(object):
         for acc_num in range(acc_nums):
             dc_now_left += delta_left_dc
             dc_now_right += delta_right_dc
-            pwm_signal.ChangeDutyCycle((dc_now_left,dc_now_right))
+            self.pwm_signals[0].ChangeDutyCycle(dc_now_left)
+            self.pwm_signals[1].ChangeDutyCycle(dc_now_right)
             time.sleep(delta_time)
         self.car_log.info("forward,angle=0")
 
@@ -161,7 +162,7 @@ class MyCar(object):
         #         pwm_signal.ChangeDutyCycle(self.pwm_dc_turn+self.pwm_dc_forward-dc_now)
         #     time.sleep(delta_time)
         while True:
-            if self.stop_signal:
+            if self.stop_signal:                
                 # 使能端赋值为停止模式
                 GPIO.output(self.en_pin,self.stop_status)
                 self.move_status = 3
@@ -172,9 +173,9 @@ class MyCar(object):
         """转弯，参数为角度"""
         self.move_status = 2
         # 使pwm占空比为转弯模式
-        pwm_dc_turn = (self.pwm_dc_turn_left,self.pwm_dc_turn_right)
-        for pwm_signal in self.pwm_signals:
-            pwm_signal.ChangeDutyCycle(pwm_dc_turn)
+
+        self.pwm_signal[0].ChangeDutyCycle(self.pwm_dc_turn_left)
+        self.pwm_signal[1].ChangeDutyCycle(self.pwm_dc_turn_right)
 
         angle = int(abs(angle) % 360)
         # 计算转弯时间
@@ -195,16 +196,16 @@ class MyCar(object):
         """后退，pwm采用转弯模式"""
         self.move_status = 4
         # 使pwm占空比为转弯模式
-        pwm_dc_turn = (self.pwm_dc_turn_left,self.pwm_dc_turn_right)
-        for pwm_signal in self.pwm_signals:
-            pwm_signal.ChangeDutyCycle(pwm_dc_turn)
+        self.pwm_signal[0].ChangeDutyCycle(self.pwm_dc_turn_left)
+        self.pwm_signal[1].ChangeDutyCycle(self.pwm_dc_turn_right)
         GPIO.output(self.en_pin,self.back_status)
         self.car_log.info("backup,angle=0")
 
     def listenStopSignal(self):
-        deal1 = Thread(target=self.dealStopSignal)
-        deal1.setDaemon(True)
-        deal1.start()
+        print('listenStopSignal done')
+        deal2 = Thread(target=self.dealStopSignal)
+        deal2.setDaemon(True)
+        deal2.start()
 
     def calaTurnTime(self,angle):
         """根据输入的角度计算转弯时间"""
@@ -314,27 +315,19 @@ class MyCar(object):
 if __name__ == '__main__':
     car1 = MyCar()
     # car1.listen_sensor_v2()
+    car1.listenStopSignal()
 
-
+    print('moving start...')
+    s1 = time.time()
     car1.forward()
-    # time.sleep(0.5)
-    # car1.stop()
 
-    # car1.turn(60)
-    # car1.turn(310)
-    # car1.turn(5)
-    car1.turn(300)
-    # # car1.turn(22)
-    # car1.forward()
-    # time.sleep(0.2)
-    car1.stop()
+    time.sleep(0.2)
+    car1.stop_signal = True
+    s2 = time.time()
 
-
-    # car1.backup()
-    # car1.stop()
 
     car1.shutDown()
 
-
+    print(s2-s1)
     print("all done")
 
