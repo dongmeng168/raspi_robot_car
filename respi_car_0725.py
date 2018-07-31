@@ -65,8 +65,8 @@ class MyCar(object):
 
         
 
-        self.pwm_dc_forward_left = 40
-        self.pwm_dc_forward_right = 40
+        self.pwm_dc_forward_left = 60
+        self.pwm_dc_forward_right = 60
         self.pwm_dc_turn_left = 20
         self.pwm_dc_turn_right = 20
         self.pwm_hz = 50
@@ -85,7 +85,7 @@ class MyCar(object):
         self.back_status = (0,1,0,1)
 
         # 前进时加速到最大速度时间，减速时减速时间，均设为1秒
-        self.forward_acc_dec_time = 2
+        self.forward_acc_dec_time = 1.5
 
         # 距离感应器，键为感应器所在位置的角度，值对感应器状态，初始为1，没有感应到物体
         self.sensor_pin = (35,36,37,38)
@@ -136,31 +136,46 @@ class MyCar(object):
         self.move_status = 1
         # 使能端赋值为前进模式
         GPIO.output(self.en_pin,self.forward_status)
-        # 慢慢修改占空比从转弯模式为前进模式
+
+        self.car_log.info("forward,angle=0")
+
+    def pwmTuning(self):
+        deal3 = Thread(target=self.pwmSet)
+        deal3.setDaemon(True)
+        deal3.start()
+
+    def pwmSet(self):
         acc_nums = 20
         delta_left_dc = int((self.pwm_dc_forward_left - self.pwm_dc_turn_left)/acc_nums)
         delta_right_dc = int((self.pwm_dc_forward_right - self.pwm_dc_turn_right)/acc_nums)
-        delta_time = self.forward_acc_dec_time/acc_nums
+        delta_time = self.forward_acc_dec_time/acc_nums      
+        while True:
+            if self.move_status == 1:
+                dc_now_left = self.pwm_dc_turn_left
+                dc_now_right = self.pwm_dc_turn_right
+                for acc_num in range(acc_nums):
+                    dc_now_left += delta_left_dc
+                    dc_now_right += delta_right_dc
+                    self.pwm_signals[0].ChangeDutyCycle(dc_now_left)
+                    self.pwm_signals[1].ChangeDutyCycle(dc_now_right)
+                    time.sleep(delta_time)
+            elif self.move_status == 3 :
+                dc_now_left = self.pwm_dc_forward_left
+                dc_now_right = self.pwm_dc_forward_right
+                for acc_num in range(acc_nums):
+                    dc_now_left -= delta_left_dc
+                    dc_now_right -= delta_right_dc
+                    self.pwm_signals[0].ChangeDutyCycle(dc_now_left)
+                    self.pwm_signals[1].ChangeDutyCycle(dc_now_right)
+                    time.sleep(delta_time)
+            else:
+                self.pwm_signals[0].ChangeDutyCycle(self.pwm_dc_turn_left)
+                self.pwm_signals[1].ChangeDutyCycle(self.pwm_dc_turn_right)
+            time.sleep(0.001)
 
-        dc_now_left = self.pwm_dc_turn_left
-        dc_now_right = self.pwm_dc_turn_right
-
-        for acc_num in range(acc_nums):
-            dc_now_left += delta_left_dc
-            dc_now_right += delta_right_dc
-            self.pwm_signals[0].ChangeDutyCycle(dc_now_left)
-            self.pwm_signals[1].ChangeDutyCycle(dc_now_right)
-            time.sleep(delta_time)
-        self.car_log.info("forward,angle=0")
 
     def dealStopSignal(self):
         """小车停止"""
-        # 慢慢修改占空比从前进模式到转弯模式，然后停车
-        # delta_time = self.forward_acc_dec_time*1.0/(self.pwm_dc_forward-self.pwm_dc_turn )
-        # for dc_now in range(self.pwm_dc_turn,self.pwm_dc_forward+1):
-        #     for pwm_signal in self.pwm_signals:
-        #         pwm_signal.ChangeDutyCycle(self.pwm_dc_turn+self.pwm_dc_forward-dc_now)
-        #     time.sleep(delta_time)
         while True:
             if self.stop_signal:                
                 # 使能端赋值为停止模式
@@ -174,8 +189,8 @@ class MyCar(object):
         self.move_status = 2
         # 使pwm占空比为转弯模式
 
-        self.pwm_signal[0].ChangeDutyCycle(self.pwm_dc_turn_left)
-        self.pwm_signal[1].ChangeDutyCycle(self.pwm_dc_turn_right)
+        # self.pwm_signal[0].ChangeDutyCycle(self.pwm_dc_turn_left)
+        # self.pwm_signal[1].ChangeDutyCycle(self.pwm_dc_turn_right)
 
         angle = int(abs(angle) % 360)
         # 计算转弯时间
@@ -209,7 +224,7 @@ class MyCar(object):
 
     def calaTurnTime(self,angle):
         """根据输入的角度计算转弯时间"""
-        turn_time = angle*3.7/1000.0
+        turn_time = angle*5/1000.0
         self.car_log.info("calaTurnTime,angle=%s,time=%s" % (angle,turn_time))
         return turn_time
 
@@ -316,12 +331,21 @@ if __name__ == '__main__':
     car1 = MyCar()
     # car1.listen_sensor_v2()
     car1.listenStopSignal()
+    car1.pwmTuning()
 
     print('moving start...')
     s1 = time.time()
-    car1.forward()
 
-    time.sleep(0.2)
+    # car1.forward()
+    # time.sleep(1)
+
+    car1.turn(280)
+
+
+
+
+
+
     car1.stop_signal = True
     s2 = time.time()
 
