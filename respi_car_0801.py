@@ -87,8 +87,11 @@ class MyCar(object):
         # 前进时加速到最大速度时间，减速时减速时间，均设为1秒
         self.forward_acc_dec_time = 1.0
 
-        # 距离感应器，键为感应器所在位置的角度，值对感应器状态，初始为1，没有感应到物体
-        self.sensor_pin = (7,22)
+        # 声波距离感应器
+        self.distance_trigger_pin = 31
+        self.distence_echo_pin = 29
+        self.distance_cm = 0
+        self.distance_critical = 20
         # 小车静止时，检测到物体靠近会小车转向再前进，参数为前进时间，单位为秒
         self.sensor_leave_time = 0.1
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
@@ -122,8 +125,8 @@ class MyCar(object):
         for pwm_signal in self.pwm_signals:
             pwm_signal.start(self.pwm_dc_forward_left)
         # 设置距离感应器，初始状态上拉为高电平，感应器时遇到物品低电平
-        for pin in self.sensor_pin :
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(self.distance_trigger_pin,GPIO.OUT)
+        GPIO.setup(self.distence_echo_pin,GPIO.IN)
         # 纪录设置完成到日志中
         self.car_log.info("start_ok,angle=0")
 
@@ -234,27 +237,54 @@ class MyCar(object):
         GPIO.cleanup()
         self.car_log.info("shutDown,angle=0")
 
-    def listenInfraredDistance(self):
-        for pin in self.sensor_pin:
-            GPIO.add_event_detect(pin, GPIO.RISING, callback=self.dealInfraredDistance)
-    def dealInfraredDistance(self,pin):
-        self.stop_signal = True
-        # print(pin,'接口有障碍物',time.time())
+    def getDistance(self):
+
+        while True:
+            GPIO.output(self.distance_trigger_pin,True)
+            time.sleep(0.0001)
+            GPIO.output(self.distance_trigger_pin,False)
+
+            count = 10000
+            while GPIO.input(self.distence_echo_pin) != True and count>0:
+                count = count-1
+
+            start = time.time()
+
+            count = 10000
+            while GPIO.input(self.distence_echo_pin) != False and count>0:
+                count = count-1    
+
+            finish = time.time()
+            pulse_len = finish-start
+            self.distance_cm = pulse_len/0.000058
+
+            if self.distance_cm < self.distance_critical:
+                GPIO.output(self.en_pin,self.stop_status)
+
+            time.sleep(0.001)     
+
+            # print('listenDistance  ',self.distance_cm)
+
+    def listenDistance(self):
+        deal3 = Thread(target=self.getDistance)
+        deal3.setDaemon(True)
+        deal3.start()
+        
 
 
 if __name__ == '__main__':
     car1 = MyCar()
-    car1.listenInfraredDistance()
+    car1.listenDistance()
     car1.listenStopSignal()
     car1.pwmTuning()
 
-    print('moving start...')
-    s1 = time.time()
+    # print('moving start...')
+    # s1 = time.time()
 
     # car1.forward()
-    # time.sleep(2)
+    time.sleep(20)
 
-    car1.turn(280)
+    # car1.turn(280)
 
 
 
@@ -262,11 +292,11 @@ if __name__ == '__main__':
 
 
     car1.stop_signal = True
-    s2 = time.time()
+    # s2 = time.time()
 
 
     car1.shutDown()
 
-    print(s2-s1)
+    # print(s2-s1)
     print("all done")
 
