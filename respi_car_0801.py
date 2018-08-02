@@ -61,42 +61,47 @@ class TraceStatus(object):
 class MyCar(object):
     """docstring for MyCar"""
     def __init__(self):
-        """定义pwm参数，占空比在前进和转弯时不同，频率为50hz"""
-
-        
-
+        """
+        定义pwm参数，forward为前进时最高占空比，前进时占空比从转弯占空比开始到前进时最高占空比
+        turn为转弯时占空比，转弯采用不变的占空比
+        前进和转弯分别定义左边有右边占空比，为方便调节两边的速度
+        pwm_hz为频率
+        """
         self.pwm_dc_forward_left = 100
         self.pwm_dc_forward_right = 80
         self.pwm_dc_turn_left = 30
         self.pwm_dc_turn_right = 30
         self.pwm_hz = 100
 
-        # pwm信号引脚
+        # L298n模块pwm信号引脚
         self.pwm_pin = (16,18)
 
-        # 控制信号引脚
+        # L298n模块控制信号引脚
         self.en_pin = (11,12,13,15)
 
-        # 前进，左转，右转,停止，模式对应使能引脚状态
+        # 前进，左转，右转,停止，模式对应L298n模块使能引脚状态
         self.forward_status = (1,0,1,0)
         self.turn_left_status = (0,1,1,0)
         self.turn_right_status = (1,0,0,1)
         self.stop_status = (0,0,0,0)
         self.back_status = (0,1,0,1)
 
-        # 前进时加速到最大速度时间，减速时减速时间，均设为1秒
+        # 前进时加速到最大速度时间，减速时减速到转弯速度时间
         self.forward_acc_dec_time = 1.0
 
         # 声波距离感应器
+        # distance_trigger_pin为控制引脚，distance_echo_pin为输入引脚
+        # distance_cm为当前距离
+        # distance_critical为检测到物体报警距离
         self.distance_trigger_pin = 31
-        self.distence_echo_pin = 29
+        self.distance_echo_pin = 29
         self.distance_cm = 0
         self.distance_critical = 20
-        # 小车静止时，检测到物体靠近会小车转向再前进，参数为前进时间，单位为秒
-        self.sensor_leave_time = 0.1
+ 
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
         self.move_status = 0
 
+        # 小车是否需要停止，该值为真是小车停止（单独线程轮询检测）
         self.stop_signal = False
 
         """初始化日志记录类"""
@@ -111,7 +116,7 @@ class MyCar(object):
         """设置小车pwm和控制引脚初始化"""
         # 定义引脚号规则，使用BOARD模式
         GPIO.setmode(GPIO.BOARD)
-        # GPIO.setwarnings(False)
+        GPIO.setwarnings(False)
         # 控制引脚初始化，全部为0，默认初始状态为停止
         for pin in self.en_pin:
             GPIO.setup(pin, GPIO.OUT)
@@ -124,9 +129,9 @@ class MyCar(object):
         # 以 self.pwm_dc_forward 占空比开启pwm信号，默认初始占空比为前进模式占空比
         for pwm_signal in self.pwm_signals:
             pwm_signal.start(self.pwm_dc_forward_left)
-        # 设置距离感应器，初始状态上拉为高电平，感应器时遇到物品低电平
+        # 设置声波距离感应器
         GPIO.setup(self.distance_trigger_pin,GPIO.OUT)
-        GPIO.setup(self.distence_echo_pin,GPIO.IN)
+        GPIO.setup(self.distance_echo_pin,GPIO.IN)
         # 纪录设置完成到日志中
         self.car_log.info("start_ok,angle=0")
 
@@ -135,21 +140,25 @@ class MyCar(object):
         self.move_status = 1
         # 使能端赋值为前进模式
         GPIO.output(self.en_pin,self.forward_status)
-
+        # 纪录设置完成到日志中
         self.car_log.info("forward,angle=0")
 
     def pwmTuning(self):
+        '''调节pwm值，目的是保持走直线和车启动的加速、停止的减速'''
         deal3 = Thread(target=self.pwmSet)
         deal3.setDaemon(True)
         deal3.start()
 
     def pwmSet(self):
+        '''根据左右轮设置的不同的起始pwm和最大pwm控制车不同状态下的两轮的速度'''
         acc_nums = 20
         delta_left_dc = int((self.pwm_dc_forward_left - self.pwm_dc_turn_left)/acc_nums)
         delta_right_dc = int((self.pwm_dc_forward_right - self.pwm_dc_turn_right)/acc_nums)
         delta_time = self.forward_acc_dec_time/acc_nums 
         acc_flag = True     
         while True:
+            # 车是从其他状态切换（acc_flag参数保证）回的前进状态，则加速
+            # 以后用陀螺仪保证左右两侧的平衡，需要修改代码
             if self.move_status == 1 and acc_flag :
                 acc_flag = False
                 dc_now_left = self.pwm_dc_turn_left
@@ -161,6 +170,7 @@ class MyCar(object):
                     self.pwm_signals[1].ChangeDutyCycle(dc_now_right)
                     time.sleep(delta_time)
             elif self.move_status == 3 :
+                # 停车状态，减速停车
                 acc_flag = False
                 dc_now_left = self.pwm_dc_forward_left
                 dc_now_right = self.pwm_dc_forward_right
@@ -171,6 +181,7 @@ class MyCar(object):
                     self.pwm_signals[1].ChangeDutyCycle(dc_now_right)
                     time.sleep(delta_time)
             else:
+                # 转弯和其他状态
                 acc_flag = False
                 self.pwm_signals[0].ChangeDutyCycle(self.pwm_dc_turn_left)
                 self.pwm_signals[1].ChangeDutyCycle(self.pwm_dc_turn_right)
@@ -178,7 +189,7 @@ class MyCar(object):
 
 
     def dealStopSignal(self):
-        """小车停止"""
+        """处理小车停止信号的线程"""
         while True:
             if self.stop_signal:                
                 # 使能端赋值为停止模式
@@ -190,11 +201,7 @@ class MyCar(object):
     def turn(self,angle):
         """转弯，参数为角度"""
         self.move_status = 2
-        # 使pwm占空比为转弯模式
-
-        # self.pwm_signal[0].ChangeDutyCycle(self.pwm_dc_turn_left)
-        # self.pwm_signal[1].ChangeDutyCycle(self.pwm_dc_turn_right)
-
+        # 通过一个简单的公式计算角度和转弯时间，不准确，打算用陀螺仪实现精确转弯
         angle = int(abs(angle) % 360)
         # 计算转弯时间
         turn_time = self.calaTurnTime(angle)
@@ -220,6 +227,7 @@ class MyCar(object):
         self.car_log.info("backup,angle=0")
 
     def listenStopSignal(self):
+        """调用线程监听小车停止信号"""
         print('listenStopSignal done')
         deal2 = Thread(target=self.dealStopSignal)
         deal2.setDaemon(True)
@@ -238,34 +246,35 @@ class MyCar(object):
         self.car_log.info("shutDown,angle=0")
 
     def getDistance(self):
-
+        '''采用超声波模块计算距离的线程'''
         while True:
+            # 发送一个触发信号，开始发送超声波测距
             GPIO.output(self.distance_trigger_pin,True)
             time.sleep(0.0001)
             GPIO.output(self.distance_trigger_pin,False)
-
+            # 获得开始时间，电平为1
             count = 10000
-            while GPIO.input(self.distence_echo_pin) != True and count>0:
+            while GPIO.input(self.distance_echo_pin) != True and count>0:
                 count = count-1
-
             start = time.time()
-
+            # 获得结束时间，电平为0
             count = 10000
-            while GPIO.input(self.distence_echo_pin) != False and count>0:
+            while GPIO.input(self.distance_echo_pin) != False and count>0:
                 count = count-1    
-
             finish = time.time()
+            # 根据时间计算距离
             pulse_len = finish-start
             self.distance_cm = pulse_len/0.000058
-
+            # 如果距离小于临界距离，立即极速停车
             if self.distance_cm < self.distance_critical:
                 GPIO.output(self.en_pin,self.stop_status)
-
+            # 轮询周期为0.001秒
             time.sleep(0.001)     
 
             # print('listenDistance  ',self.distance_cm)
 
     def listenDistance(self):
+        '''监听距离'''
         deal3 = Thread(target=self.getDistance)
         deal3.setDaemon(True)
         deal3.start()
