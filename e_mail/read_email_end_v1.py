@@ -30,7 +30,9 @@ class MyEmail(object):
         self.server.user(self.my_email)
         self.server.pass_(self.password)
         print('login ok')
+
     def parseMails(self,mail_Date=None,mail_Subject=None):
+        '''解析邮件，'''
         #打印邮件数量和占用空间
         (self.mails_num,self.mails_size) = self.server.stat()
         resp, mails, octets = self.server.list()
@@ -48,8 +50,10 @@ class MyEmail(object):
                     head_info_dict[header] = self.decode_str(msg[header])
             if (mail_Subject in  head_info_dict['Subject']) and (mail_Date in head_info_dict['Date']):
                 self.msg = msg
-                print(head_info_dict['Subject'])
+                self.picked_mail_index = mail_index
+                # print(head_info_dict['Subject'])
             self.mails_head_list.append(head_info_dict)
+
 
     #这是检测编码部分，有点不懂
     def guess_charset(self,msg):
@@ -169,7 +173,10 @@ part_subject = 'Raspberry_Internet_IP'
 # mye1.parseMails(date_now,part_subject)
 mye1.parseMails('31 Jul 2018','邮件测试')
 
-# print(mye1.mails_head_list)
+print('邮件列表开始')
+print(mye1.mails_head_list)
+print('邮件列表结束')
+
 
 mye1.parseMessageWalk()
 
