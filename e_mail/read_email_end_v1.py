@@ -59,7 +59,7 @@ class MyEmail(object):
             for header in 'From', 'To', 'Subject', 'Date', 'Message-ID':
                 if header in msg:
                     print('the msg head is-----> ',msg[header])
-                    head_info_dict[header] = self.decode_str(msg[header])
+                    head_info_dict[header] = self.decode_str(msg[header].strip('"'))
             self.mails_head_list.append(head_info_dict)
             self.msgs_all_id_dict[head_info_dict['Message-ID']] = msg
 
@@ -101,36 +101,6 @@ class MyEmail(object):
         else:
             str_ch_code = str_ch
         return str_ch_code
-
-
-    #递归打印信息
-    def parseMeassage(self,message=None):
-        if self.msg:
-            message = self.msg
-        else:
-            print("get nothing")
-            exit(2)
-        maintype = message.get_content_maintype()
-        content_type = message.get_content_type()
-
-        if maintype == 'multipart':
-            parts = message.get_payload()
-
-            for n, part in enumerate(parts):
-                self.parseMeassage(part)
-
-        # elif maintype == 'text/plain' or maintype == 'text/html':
-        elif maintype == 'text':
-            mail_content = message.get_payload(decode=True).strip()
-            charset = self.guess_charset(message)
-            if charset:
-                mail_content = mail_content.decode(charset)
-            if content_type == 'text/plain':
-                self.msg_body = mail_content.decode('utf8')
-            if content_type == 'text/html':
-                print('Html: %s' % str(mail_content))
-        else:
-            print('Attachment: %s' % maintype)
 
     def parseMessages(self):
         if not self.msgs_pick_id_list:
