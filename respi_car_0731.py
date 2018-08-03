@@ -65,11 +65,11 @@ class MyCar(object):
 
         
 
-        self.pwm_dc_forward_left = 60
-        self.pwm_dc_forward_right = 60
-        self.pwm_dc_turn_left = 20
-        self.pwm_dc_turn_right = 20
-        self.pwm_hz = 50
+        self.pwm_dc_forward_left = 100
+        self.pwm_dc_forward_right = 80
+        self.pwm_dc_turn_left = 30
+        self.pwm_dc_turn_right = 30
+        self.pwm_hz = 100
 
         # pwm信号引脚
         self.pwm_pin = (16,18)
@@ -85,14 +85,10 @@ class MyCar(object):
         self.back_status = (0,1,0,1)
 
         # 前进时加速到最大速度时间，减速时减速时间，均设为1秒
-        self.forward_acc_dec_time = 1.5
+        self.forward_acc_dec_time = 1.0
 
         # 距离感应器，键为感应器所在位置的角度，值对感应器状态，初始为1，没有感应到物体
-        self.sensor_pin = (35,36,37,38)
-        self.sensor_pin_angle = {35:0,36:90,37:180,38:270}
-        self.sensor_angle_status = {0:1,90:1,180:1,270:1}
-        # 距离感应器是否感应到物品，1表示没有
-        self.sensor_of_things = {0:1,90:1,180:1,270:1}
+        self.sensor_pin = (7,22)
         # 小车静止时，检测到物体靠近会小车转向再前进，参数为前进时间，单位为秒
         self.sensor_leave_time = 0.1
         # 存储小车当前状态，初始化为0，前进为1,转向为2，停止为3，后退为4
@@ -238,99 +234,12 @@ class MyCar(object):
         GPIO.cleanup()
         self.car_log.info("shutDown,angle=0")
 
-
-    def listen_sensor_v1(self):
-        """监听并用线程处理红外线模块引脚为0的函数"""
-        # 监听所有红外线模块引脚
-        for pin in self.sensor_pin:
-            GPIO.add_event_detect(pin, GPIO.FALLING)
-        deal1 = Thread(target=self.deal_sensor_v1)
-        deal1.setDaemon(True)
-        deal1.start()
-
-    def deal_sensor_v1(self):
-        """处理单个或者多个红外线模块引脚为0的函数，用一个线程跑"""
-        while True:
-            angle_status_dict = copy(self.sensor_angle_status)
-            for pin in self.sensor_pin:
-                if GPIO.event_detected(pin):
-                    angle_status_dict[self.sensor_pin_angle[pin]] = 0
-                    self.sensor_of_things[self.sensor_pin_angle[pin]] = 0
-
-            # 遇到物品的引脚sensor_angle_status字典值为0
-            # 值为1的为没有遇到物品的方向，随机选取值为1的角度为转向角度
-            # 值为1的角度（没有遇到物体的方向）为0个，则原地不动，返回角度0
-            angle_list = []
-            for key,value in angle_status_dict.items():
-                if value == 1:
-                    angle_list.append(angle_status_dict[key])
-            # 没有检测到物品的角度值为1，放入列表中，如果列表不为空，表示被围着了，应该停止
-            if len(angle_list) == 0 :
-                self.stop()
-            # 至少一个模块检测到物品
-            if len(angle_list) < len(self.sensor_angle_status) :
-                # 静止状态，则旋转一个角度，向前走一段时间,停止
-                if self.move_status == 3 :
-                    # 随机选择一个剩余的作为转的角度
-
-                    angle = choice(angle_list)
-                    self.car_log.info("sensor,stop,all_angle=%s,turn_angle=%s" % (str(angle_list),str(angle)))
-                    self.turn(angle)
-                    self.forward()
-                    time.sleep(self.sensor_leave_time)
-                    self.stop()
-                # 前进状态，则停止前进
-                elif self.move_status == 1 :
-                    self.car_log.info("sensor,forward,all_angle=%s" % str(angle_list))
-                    self.stop()
-            # 为了测试时间为0.1，实际使用修改为0.001
-            time.sleep(0.01)
-
-    def listen_sensor_v2(self):
-        """监听并用线程处理红外线模块引脚为0的函数"""
-        for pin in self.sensor_pin:
-            GPIO.add_event_detect(pin, GPIO.BOTH, callback=self.deal_sensor_v2)
-    def deal_sensor_v2(self):
-        angle_status_dict = copy(self.sensor_angle_status)
-        for pin in self.sensor_pin:
-            angle_status_dict[self.sensor_pin_angle[pin]] = GPIO.input(pin)
-            self.sensor_of_things[self.sensor_pin_angle[pin]] = 0
-
-        # 遇到物品的引脚sensor_angle_status字典值为0
-        # 值为1的为没有遇到物品的方向，随机选取值为1的角度为转向角度
-        # 值为1的角度（没有遇到物体的方向）为0个，则原地不动，返回角度0
-        angle_list = []
-        for key,value in angle_status_dict.items():
-            if value == 1:
-                angle_list.append(angle_status_dict[key])
-        # 没有检测到物品的角度值为1，放入列表中，如果列表不为空，表示被围着了，应该停止
-        if len(angle_list) == 0 :
-            self.stop()
-        # 至少一个模块检测到物品
-        if len(angle_list) < len(self.sensor_angle_status) :
-            # 静止状态，则旋转一个角度，向前走一段时间,停止
-            if self.move_status == 3 :
-                # 随机选择一个剩余的作为转的角度
-
-                angle = choice(angle_list)
-                self.car_log.info("sensor,stop,all_angle=%s,turn_angle=%s" % (str(angle_list),str(angle)))
-                self.turn(angle)
-                self.forward()
-                time.sleep(self.sensor_leave_time)
-                self.stop()
-            # 前进状态，则停止前进
-            elif self.move_status == 1 :
-                self.car_log.info("sensor,forward,all_angle=%s" % str(angle_list))
-                self.stop()
-        # 为了测试时间为0.1，实际使用修改为0.001
-        time.sleep(0.01)
-
     def listenInfraredDistance(self):
         for pin in self.sensor_pin:
             GPIO.add_event_detect(pin, GPIO.RISING, callback=self.dealInfraredDistance)
     def dealInfraredDistance(self,pin):
         self.stop_signal = True
-        print(pin,'detect something',time.time())
+        # print(pin,'接口有障碍物',time.time())
 
 
 if __name__ == '__main__':
@@ -343,9 +252,9 @@ if __name__ == '__main__':
     s1 = time.time()
 
     # car1.forward()
-    time.sleep(100)
+    # time.sleep(2)
 
-    # car1.turn(280)
+    car1.turn(280)
 
 
 

@@ -43,7 +43,9 @@ class MyEmail(object):
         self.server.user(self.my_email)
         self.server.pass_(self.password)
         print('login ok')
+
     def parseMails(self):
+
         #打印邮件数量和占用空间
         (self.mails_num,self.mails_size) = self.server.stat()
         resp, mails, octets = self.server.list()
@@ -58,7 +60,6 @@ class MyEmail(object):
                 if header in msg:
                     print('the msg head is-----> ',msg[header])
                     head_info_dict[header] = self.decode_str(msg[header])
-                    # print('the head_info_dict[header] is',head_info_dict[header])
             self.mails_head_list.append(head_info_dict)
             self.msgs_all_id_dict[head_info_dict['Message-ID']] = msg
 
@@ -66,6 +67,7 @@ class MyEmail(object):
         for mail_head in self.mails_head_list:
             if (mail_Subject in  mail_head['Subject']) and (mail_Date in mail_head['Date']):
                 self.msgs_pick_id_list.append(mail_head['Message-ID'])
+
 
     #这是检测编码部分，有点不懂
     def guess_charset(self,msg):
@@ -208,6 +210,7 @@ mye1 =MyEmail()
 # # mye1.parseMails(date_now,part_subject)
 
 mye1.parseMails()
+
 
 mye1.pickMail('31 Jul 2018','邮件测试')
 
