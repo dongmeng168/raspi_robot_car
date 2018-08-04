@@ -58,7 +58,7 @@ class MyEmail(object):
             msg = message_from_string(msg_content)
             for header in 'From', 'To', 'Subject', 'Date', 'Message-ID':
                 if header in msg:
-                    print('the msg head is-----> ',msg[header])
+                    # print('the msg head is-----> ',msg[header])
                     head_info_dict[header] = self.decode_str(msg[header].strip('"'))
             self.mails_head_list.append(head_info_dict)
             self.msgs_all_id_dict[head_info_dict['Message-ID']] = msg
@@ -83,7 +83,7 @@ class MyEmail(object):
         value, charset = decode_header(s)[0]
         if charset:
             value = value.decode(charset)
-        print('decode_str--->',value,charset)
+        # print('decode_str--->',value,charset)
         return value
 
     def decode_chinese(self,str_mine_ch):
@@ -134,9 +134,6 @@ class MyEmail(object):
                 maintype = part.get_content_maintype()
                 content_type = part.get_content_type()
                 # print('no filename',maintype,content_type,counter)
-
-
-
 
                 mail_content = part.get_payload(decode=True).strip()
                 charset = self.guess_charset(part)
@@ -191,10 +188,10 @@ mye1.showMailInfo()
 
 # mye1.parseMeassage()
 # print(mye1.msg_body)
-print('////////////')
-print(mye1.mails_head_list)
-print('&&&&&&&&&&&&&&&&&')
-for aa in mye1.mails_head_list:
-    print('++++++++++++')
-    for key,value in aa.items():
-        print(key,str(value))
+# print('////////////')
+# print(mye1.mails_head_list)
+# print('&&&&&&&&&&&&&&&&&')
+# for aa in mye1.mails_head_list:
+#     print('++++++++++++')
+#     for key,value in aa.items():
+#         print(key,str(value))
