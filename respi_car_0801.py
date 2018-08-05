@@ -104,6 +104,11 @@ class MyCar(object):
         # 小车是否需要停止，该值为真是小车停止（单独线程轮询检测）
         self.stop_signal = False
 
+        # 舵机引脚
+        self.servo_pin = 7
+        # 舵机是否需要转动一圈，初始值为否
+        self.servo_turn = False
+
         """初始化日志记录类"""
         self.car_log = MyCarLog()
 
@@ -132,6 +137,10 @@ class MyCar(object):
         # 设置声波距离感应器
         GPIO.setup(self.distance_trigger_pin,GPIO.OUT)
         GPIO.setup(self.distance_echo_pin,GPIO.IN)
+        # 设置舵机pwm引脚
+        GPIO.setup(self.servo_pin,GPIO.OUT)
+        self.senvor_pwm = GPIO.PWM(self.servo_pin,50)
+        self.senvor_pwm.start(0)
         # 纪录设置完成到日志中
         self.car_log.info("start_ok,angle=0")
 
@@ -278,29 +287,50 @@ class MyCar(object):
         deal3 = Thread(target=self.getDistance)
         deal3.setDaemon(True)
         deal3.start()
+
+    def servoTurn(self):
+        # turn around is [0,-90],[-90,0],[0,90],[90,0]
+        while True:
+            if self.servo_turn :
+                self.servo_turn = False
+                pwm1= []
+                pwm2=[]
+                pwm3=[]
+                pwm4=[]
+                for angle in range(0,91,9):
+                    pwm1.append(7.5 + (-1 * angle)/18.0)
+                    pwm2.append(7.5 + (angle - 90)/18.0)
+                    pwm3.append(7.5 + angle/18.0)
+                    pwm4.append(7.5 + (90 - angle)/18.0)
+                pwm_all = pwm1+pwm2+pwm3+pwm4
+
+                for pwm in pwm_all:
+                    self.senvor_pwm.ChangeDutyCycle(pwm)
+                    time.sleep(0.1)
+
         
 
 
 if __name__ == '__main__':
     car1 = MyCar()
-    car1.listenDistance()
-    car1.listenStopSignal()
-    car1.pwmTuning()
+    # car1.listenDistance()
+    # car1.listenStopSignal()
+    # car1.pwmTuning()
 
-    # print('moving start...')
-    # s1 = time.time()
+    # # print('moving start...')
+    # # s1 = time.time()
 
-    # car1.forward()
-    time.sleep(20)
+    # # car1.forward()
+    # time.sleep(20)
 
-    # car1.turn(280)
-
-
+    # # car1.turn(280)
 
 
 
 
-    car1.stop_signal = True
+
+
+    # car1.stop_signal = True
     # s2 = time.time()
 
 
