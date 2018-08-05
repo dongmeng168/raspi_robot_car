@@ -104,6 +104,18 @@ class MyCar(object):
         # 小车是否需要停止，该值为真是小车停止（单独线程轮询检测）
         self.stop_signal = False
 
+        # 舵机pwm信号引脚
+        self.servo_pin = 7
+        # 舵机是否需要转动一圈，初始值为否
+        self.servo_turn = False
+        # 舵机转到不同角度下物品的距离，右边为负角度，左边为正角度
+        # 距离为对应角度下的距离，单位厘米
+        self.servo_angle = []
+        self.servo_distance = []
+
+        # 定义是否为漫步模式，该模式为前进，遇到障碍物转弯，然后再前进
+        self.walk_model = True
+
         """初始化日志记录类"""
         self.car_log = MyCarLog()
 
@@ -132,6 +144,10 @@ class MyCar(object):
         # 设置声波距离感应器
         GPIO.setup(self.distance_trigger_pin,GPIO.OUT)
         GPIO.setup(self.distance_echo_pin,GPIO.IN)
+        # 设置舵机pwm引脚
+        GPIO.setup(self.servo_pin,GPIO.OUT,initial=False)
+        self.senvor_pwm = GPIO.PWM(self.servo_pin,50)
+        self.senvor_pwm.start(0)
         # 纪录设置完成到日志中
         self.car_log.info("start_ok,angle=0")
 
@@ -189,7 +205,7 @@ class MyCar(object):
 
 
     def dealStopSignal(self):
-        """处理小车停止信号的线程"""
+        """线程，处理小车停止信号的线程"""
         while True:
             if self.stop_signal:                
                 # 使能端赋值为停止模式
@@ -227,8 +243,8 @@ class MyCar(object):
         self.car_log.info("backup,angle=0")
 
     def listenStopSignal(self):
-        """调用线程监听小车停止信号"""
-        print('listenStopSignal done')
+        """调用线程监听小车收否需要停止信号stop_signal"""
+        print('listenStopSignal start...')
         deal2 = Thread(target=self.dealStopSignal)
         deal2.setDaemon(True)
         deal2.start()
@@ -240,13 +256,14 @@ class MyCar(object):
         return turn_time
 
     def shutDown(self):
+        '''因为--del--回收机制不好用，采用自定义程序处理收尾工作'''
         for pwm_signal in self.pwm_signals:
             pwm_signal.stop()
         GPIO.cleanup()
         self.car_log.info("shutDown,angle=0")
 
     def getDistance(self):
-        '''采用超声波模块计算距离的线程'''
+        '''线程，根据超声波模块计算距离'''
         while True:
             # 发送一个触发信号，开始发送超声波测距
             GPIO.output(self.distance_trigger_pin,True)
@@ -265,40 +282,83 @@ class MyCar(object):
             # 根据时间计算距离
             pulse_len = finish-start
             self.distance_cm = pulse_len/0.000058
-            # 如果距离小于临界距离，立即极速停车
-            if self.distance_cm < self.distance_critical:
-                GPIO.output(self.en_pin,self.stop_status)
-            # 轮询周期为0.001秒
             time.sleep(0.001)     
 
-            # print('listenDistance  ',self.distance_cm)
-
     def listenDistance(self):
-        '''监听距离'''
+        '''调用线程监听超声波距离感应器的数值'''
+        print('listenDistance start...')
         deal3 = Thread(target=self.getDistance)
         deal3.setDaemon(True)
         deal3.start()
-        
+
+    def servoTurn(self):
+        '''线程，当变量servo_turn为真时，转动电机一圈，并且将servo_turn的值设为假'''
+        # turn around is [0,-90],[-90,0],[0,90],[90,0]
+        while True:
+            if self.servo_turn :
+                self.servo_turn = False
+                pwm1= []
+                pwm2=[]
+                pwm3=[]
+                pwm4=[]
+                for angle in range(0,90,9):
+                    pwm1.append(7.5 + (-1 * angle)/18.0)
+                    pwm2.append(7.5 + (angle - 90)/18.0)
+                    pwm3.append(7.5 + angle/18.0)
+                    pwm4.append(7.5 + (90 - angle)/18.0)
+                pwm_all = pwm1+pwm2+pwm3+pwm4+[7.5]
+
+                pwm_all.remove(2.5)
+                pwm_all.remove(12.5)
+
+                for num in range(len(pwm_all)):
+                    # print(num,pwm_all[num])
+                    self.senvor_pwm.ChangeDutyCycle(pwm_all[num])
+                    time.sleep(0.12)
+                    # 第10-28个元素为从-90度到90度的范围
+                    # 在这个范围读取超声波距离，并将角度和距离分别写入变量
+                    if num >= 10 and num <= 28:
+                        angle = (pwm_all[num]-7.5)*18
+                        # print('self.distance_cm=',self.distance_cm,angle)
+                        self.servo_angle.append(angle)
+                        self.servo_distance.append(self.distance_cm)
+                self.senvor_pwm.ChangeDutyCycle(0)
+
+    def listenServoTurn(self):
+        '''调用线程监听servo_turn变量是否为真，为真则转动舵机'''
+        print('listenServoTurn start...')
+        deal4 = Thread(target=self.servoTurn)
+        deal4.setDaemon(True)
+        deal4.start()  
 
 
 if __name__ == '__main__':
     car1 = MyCar()
+    # 监听距离感应器
     car1.listenDistance()
+    # 监听停止信号
     car1.listenStopSignal()
-    car1.pwmTuning()
+    # 监听舵机转动信号
+    car1.listenServoTurn()
+    # car1.pwmTuning()
 
-    # print('moving start...')
-    # s1 = time.time()
+    # # print('moving start...')
+    # # s1 = time.time()
 
-    # car1.forward()
-    time.sleep(20)
+    # # car1.forward()
+    # time.sleep(20)
 
-    # car1.turn(280)
+    # # car1.turn(280)
+
+    car1.servo_turn = True
+
+
+    time.sleep(12)
 
 
 
-
-
+    for num in range(len(car1.servo_angle)):
+        print(car1.servo_angle[num],car1.servo_distance[num])
 
     car1.stop_signal = True
     # s2 = time.time()
