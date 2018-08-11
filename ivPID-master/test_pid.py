@@ -67,14 +67,14 @@ def test_pid(P = 0.2,  I = 0.0, D= 0.0, L=100):
         pid.update(feedback)
 
         output = pid.output + feedback
-        
+
         print('output=',output,'feedback=',feedback)
 
         time.sleep(0.02)
 
         feedback_list.append(output)
-        setpoint_list.append(feedback)
-        # setpoint_list.append(pid.SetPoint)
+        # setpoint_list.append(feedback)
+        setpoint_list.append(pid.SetPoint)
         time_list.append(i)
 
     time_sm = np.array(time_list)
@@ -95,5 +95,5 @@ def test_pid(P = 0.2,  I = 0.0, D= 0.0, L=100):
     plt.show()
 
 if __name__ == "__main__":
-    test_pid(1.1, 1, 0, L=100)
+    test_pid(1, 1, 0.002, L=100)
 #    test_pid(0.8, L=50)
