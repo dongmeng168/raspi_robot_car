@@ -345,20 +345,19 @@ if __name__ == '__main__':
     # # print('moving start...')
     # # s1 = time.time()
 
-    # # car1.forward()
-    # time.sleep(20)
+    # car1.forward()
 
     # # car1.turn(280)
 
-    car1.servo_turn = True
+    # car1.servo_turn = True
 
 
-    time.sleep(12)
+    time.sleep(5)
 
 
 
-    for num in range(len(car1.servo_angle)):
-        print(car1.servo_angle[num],car1.servo_distance[num])
+    # for num in range(len(car1.servo_angle)):
+    #     print(car1.servo_angle[num],car1.servo_distance[num])
 
     car1.stop_signal = True
     # s2 = time.time()
